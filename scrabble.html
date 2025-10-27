@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Classroom Scrabble — Teams + Countdown + Dictionary + Auto Turns</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --accent:#60a5fa; --good:#34d399; --bad:#f87171; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      background: var(--bg); color: var(--text); display:grid; place-items:start center; min-height:100vh; padding:18px; }
+    .app { width:min(1000px, 96vw); }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    h1 { margin:0; font-size:clamp(18px,3.2vw,28px); opacity:.92; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    button, input, select, label {
+      background:#1f2937; color:var(--text); border:1px solid #374151; border-radius:10px; padding:8px 10px; font-size:16px;
+    }
+    label.checkbox { display:flex; align-items:center; gap:8px; border-radius:10px; padding:8px 10px; border:1px solid #374151; }
+    input[type="file"] { padding:6px 10px; }
+    button { cursor:pointer; }
+    .primary { background: var(--accent); border-color:#3b82f6; color:#06122a; font-weight:700; }
+    .timer { min-width:120px; text-align:center; font-variant-numeric:tabular-nums;
+      background:#1f2937; border:1px solid #374151; border-radius:10px; padding:9px 12px; font-size:18px; }
+    .alarm { animation: flash 0.5s steps(2,end) 8; }
+    @keyframes flash { 50% { background:#ef4444; color:#0b0f1a; } }
+
+    .rack-wrap { background:#111827; border:1px solid #374151; border-radius:14px; padding:16px; }
+    .rack { display:grid; grid-template-columns:repeat(7,1fr); gap:14px; }
+    .tile {
+      position:relative; background:linear-gradient(145deg,#f4e6c0,#e3cfa2); border-radius:12px;
+      box-shadow:0 6px 10px rgba(0,0,0,.35), inset 0 1px 0 #ffffffa8; aspect-ratio:1/1; display:grid; place-items:center;
+    }
+    .tile .letter { font-weight:800; font-size: clamp(36px,5.2vw,64px); color:#1a1916; text-transform:uppercase; }
+    .tile .score { position:absolute; bottom:8px; right:10px; font-weight:700; font-size: clamp(12px,2vw,16px); color:#1a1916; }
+
+    .play { display:grid; grid-template-columns: 1fr auto auto auto auto; gap:10px; margin-top:14px; }
+    .hint { margin-top:8px; opacity:.9; min-height:1.4em; }
+    .teams { margin-top:16px; display:grid; gap:12px; grid-template-columns: 1fr 1fr; }
+    .team-card { background: var(--panel); border:1px solid #374151; border-radius:12px; padding:12px; transition: box-shadow .2s, border-color .2s; }
+    .team-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(96,165,250,.25) inset; }
+    .team-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .team-head h3 { margin:0; font-size:18px; }
+    .score { font-weight:800; font-size:22px; }
+    .words { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
+    .chip { background:#1f2937; border:1px solid #374151; border-radius:999px; padding:6px 10px; font-size:14px; }
+    .subtle { opacity:.8; font-size:14px; margin-left:6px; }
+    @media (max-width: 680px) { .teams { grid-template-columns:1fr; } .play { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Classroom Scrabble</h1>
+      <div class="controls">
+        <button id="newRack" class="primary" title="Draw seven new tiles">New rack</button>
+        <button id="shuffle" title="Shuffle the tiles">Shuffle</button>
+
+        <input id="duration" value="02:00" aria-label="Countdown (MM:SS)" title="Countdown (MM:SS)" style="width:110px; text-align:center;" />
+        <button id="startStop" title="Start/Stop countdown">Start</button>
+        <button id="resetTimer" title="Reset countdown">Reset</button>
+        <div id="timer" class="timer" aria-live="polite">02:00</div>
+
+        <button id="resetTeams" title="Reset team scores & words">Reset teams</button>
+
+        <label class="checkbox" title="Only accept words in the loaded dictionary">
+          <input type="checkbox" id="validateToggle" />
+          Validate words
+        </label>
+        <input type="file" id="dictFile" accept=".txt" title="Load dictionary (.txt, one word per line)" />
+        <span id="dictStatus" class="subtle">No dictionary loaded</span>
+      </div>
+    </header>
+
+    <section class="rack-wrap">
+      <div id="rack" class="rack" aria-live="polite"></div>
+
+      <form id="playForm" class="play" autocomplete="off">
+        <input id="wordInput" placeholder="Type a word using these tiles" pattern="[A-Za-z]{2,}" title="Letters only (A–Z)" autocomplete="off" />
+        <select id="teamSelect" title="Current team (auto-rotates)"></select>
+        <button class="primary" type="submit" title="Score word">Score word</button>
+        <button type="button" id="addTeamBtn" title="Add a new team">+ Team</button>
+        <button type="button" id="passBtn" title="Pass turn (no score)">Pass turn</button>
+      </form>
+      <div id="hint" class="hint"></div>
+    </section>
+
+    <section id="teams" class="teams"></section>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // --- Scrabble data (English standard) ---
+      const LETTER_VALUES = {A:1,B:3,C:3,D:2,E:1,F:4,G:2,H:4,I:1,J:8,K:5,L:1,M:3,N:1,O:1,P:3,Q:10,R:1,S:1,T:1,U:1,V:4,W:4,X:8,Y:4,Z:10};
+      const LETTER_FREQUENCIES = {A:9,B:2,C:2,D:4,E:12,F:2,G:3,H:2,I:9,J:1,K:1,L:4,M:2,N:6,O:8,P:2,Q:1,R:6,S:4,T:6,U:4,V:2,W:2,X:1,Y:2,Z:1}; // blanks omitted
+
+      // DOM
+      const rackEl = document.getElementById('rack');
+      const hintEl = document.getElementById('hint');
+      const teamsEl = document.getElementById('teams');
+      const teamSelect = document.getElementById('teamSelect');
+      const durationEl = document.getElementById('duration');
+      const timerEl = document.getElementById('timer');
+      const startStopBtn = document.getElementById('startStop');
+      const wordInput = document.getElementById('wordInput');
+      const validateToggle = document.getElementById('validateToggle');
+      const dictFile = document.getElementById('dictFile');
+      const dictStatus = document.getElementById('dictStatus');
+
+      // State
+      let rack = [];
+      let teams = [];
+      let currentTeamIndex = 0;   // NEW: tracks whose turn it is
+      let teamIdSeed = 0;
+      const newId = () => (crypto?.randomUUID?.() || `t_${Date.now()}_${teamIdSeed++}`);
+
+      // Dictionary (optional)
+      let DICT = null; // Set<string> of lowercase words
+      function loadDictionaryFromText(txt){
+        const words = txt.split(/\r?\n/).map(w => w.trim().toLowerCase())
+          .filter(w => /^[a-z]{2,}$/.test(w));
+        DICT = new Set(words);
+        dictStatus.textContent = `Dictionary: ${DICT.size.toLocaleString()} words loaded`;
+      }
+      dictFile.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => loadDictionaryFromText(String(reader.result||''));
+        reader.onerror = () => { DICT=null; dictStatus.textContent = 'Failed to read file'; };
+        reader.readAsText(f);
+      });
+
+      function msg(text, kind){
+        hintEl.textContent = text || '';
+        hintEl.style.color = kind==='error' ? '#f87171' : kind==='ok' ? '#34d399' : '#e5e7eb';
+      }
+
+      // Bag & rack
+      function makeBag(){
+        const bag = [];
+        for (const [L, n] of Object.entries(LETTER_FREQUENCIES)) for (let i=0;i<n;i++) bag.push(L);
+        return bag;
+      }
+      function drawRack(){
+        const bag = makeBag();
+        for (let i=bag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [bag[i],bag[j]]=[bag[j],bag[i]]; }
+        rack = bag.slice(0,7);
+        renderRack();
+        msg('New rack ready.');
+      }
+
+      // ---- Safe shuffle: only via button
+      function doShuffle(){
+        for (let i=rack.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [rack[i],rack[j]]=[rack[j],rack[i]]; }
+        renderRack();
+        msg('Shuffled.');
+      }
+      let allowShuffle = false;
+      function shuffleRack(){ if (!allowShuffle) return; doShuffle(); }
+      document.getElementById('shuffle').addEventListener('click', () => {
+        allowShuffle = true; try { shuffleRack(); } finally { allowShuffle = false; }
+      });
+
+      function renderRack(){
+        rackEl.innerHTML = rack.map(L => `
+          <div class="tile" role="img" aria-label="${L} worth ${LETTER_VALUES[L]} points">
+            <div class="letter">${L}</div>
+            <div class="score">${LETTER_VALUES[L]}</div>
+          </div>`).join('');
+      }
+
+      // Word check & scoring
+      function countLetters(letters){ const m=new Map(); for(const ch of letters) m.set(ch,(m.get(ch)||0)+1); return m; }
+      function canBuild(word){
+        const map = countLetters(rack);
+        for (const ch of word) { const have = map.get(ch)||0; if (!have) return false; map.set(ch, have-1); }
+        return true;
+      }
+      function scoreWord(word){ let s=0; for (const ch of word) s += LETTER_VALUES[ch]||0; return s; }
+
+      // Teams
+      function addTeam(name){
+        if (!name) return;
+        const id = newId();
+        teams.push({ id, name, score: 0, words: [] });
+        renderTeams();
+        // Keep current team index if possible; if this is the first team, set it active.
+        if (teams.length === 1) currentTeamIndex = 0;
+        syncTeamSelectToCurrent();
+      }
+      function resetTeams(){
+        if (!teams.length) { msg('No teams to reset.'); return; }
+        if (!confirm('Reset all team scores and words?')) return;
+        teams = teams.map(t => ({ id: t.id, name: t.name, score: 0, words: [] }));
+        renderTeams();
+        currentTeamIndex = 0;
+        syncTeamSelectToCurrent();
+        msg('Teams reset.');
+      }
+      function renderTeams(){
+        teamsEl.innerHTML = teams.map((t, idx) => `
+          <article class="team-card ${idx===currentTeamIndex?'active':''}" data-id="${t.id}">
+            <div class="team-head">
+              <h3>${t.name}</h3>
+              <div class="score">${t.score}</div>
+            </div>
+            <div class="words">${t.words.map(w => `<span class="chip">${w.word} · ${w.points}</span>`).join('')}</div>
+          </article>
+        `).join('');
+        teamSelect.innerHTML = teams.length
+          ? teams.map((t,i) => `<option value="${t.id}" ${i===currentTeamIndex?'selected':''}>${t.name}</option>`).join('')
+          : '<option value="" disabled selected>No teams yet</option>';
+      }
+      function recordWord(teamId, word, points){
+        const t = teams.find(x => x.id === teamId);
+        if (!t) return;
+        t.words.unshift({ word, points });
+        t.score += points;
+        renderTeams();
+      }
+
+      // Turn management
+      function syncTeamSelectToCurrent(){
+        if (!teams.length) return;
+        const id = teams[currentTeamIndex].id;
+        teamSelect.value = id;
+        renderTeams(); // refresh highlight
+      }
+      function nextTeam(){
+        if (!teams.length) return;
+        currentTeamIndex = (currentTeamIndex + 1) % teams.length;
+        syncTeamSelectToCurrent();
+      }
+      // If user manually changes the dropdown, respect it and make that the current turn:
+      teamSelect.addEventListener('change', () => {
+        const idx = teams.findIndex(t => t.id === teamSelect.value);
+        if (idx >= 0) { currentTeamIndex = idx; renderTeams(); }
+      });
+      document.getElementById('passBtn').addEventListener('click', () => {
+        msg(`${teams[currentTeamIndex]?.name || 'Team'} passes.`);
+        nextTeam();
+        wordInput.focus();
+      });
+
+      // Countdown
+      let ticking = null;
+      let remaining = 120000; // default 2:00
+      function parseMMSS(str){ const m=(str.trim()).match(/^(\d{1,2}):(\d{2})$/); if(!m) return null;
+        const mins=+m[1], secs=+m[2]; if(secs>59) return null; return (mins*60+secs)*1000; }
+      function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); const m=String(Math.floor(s/60)).padStart(2,'0'); const r=String(s%60).padStart(2,'0'); return `${m}:${r}`; }
+      function updateDisplay(){ timerEl.textContent = fmt(remaining); }
+      function setFromInput(){ const ms = parseMMSS(durationEl.value); if (ms!=null) { remaining = ms; updateDisplay(); } }
+      function startCountdown(){
+        if (ticking) return;
+        setFromInput(); durationEl.disabled = true; timerEl.classList.remove('alarm');
+        const end = performance.now() + remaining;
+        ticking = setInterval(() => {
+          remaining = Math.max(0, end - performance.now());
+          updateDisplay();
+          if (remaining <= 0) { stopCountdown(); ring(); }
+        }, 100);
+        startStopBtn.textContent = 'Stop';
+      }
+      function stopCountdown(){
+        if (!ticking) return;
+        clearInterval(ticking); ticking = null;
+        startStopBtn.textContent = 'Start'; durationEl.disabled = false;
+      }
+      function resetCountdown(){ stopCountdown(); setFromInput(); timerEl.classList.remove('alarm'); }
+      function ring(){ timerEl.classList.add('alarm');
+        try { const AC = window.AudioContext || window.webkitAudioContext; const ctx = new AC();
+          const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880;
+          o.connect(g); g.connect(ctx.destination);
+          g.gain.setValueAtTime(0.001, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime+0.01);
+          o.start(); setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime+0.2);
+            o.stop(ctx.currentTime+0.25); ctx.close(); }, 220);
+        } catch(e) {}
+      }
+
+      // Events (buttons only — no keyboard shortcuts)
+      document.getElementById('newRack').addEventListener('click', drawRack);
+      document.getElementById('addTeamBtn').addEventListener('click', () => {
+        const name = prompt('Team name?');
+        if (name && name.trim()) { addTeam(name.trim()); msg(`Added team “${name.trim()}”.`); }
+      });
+      document.getElementById('resetTeams').addEventListener('click', resetTeams);
+      document.getElementById('startStop').addEventListener('click', () => ticking ? stopCountdown() : startCountdown());
+      document.getElementById('resetTimer').addEventListener('click', resetCountdown);
+      durationEl.addEventListener('change', setFromInput);
+
+      // Form submit (with optional dictionary validation) + auto-advance turn
+      document.getElementById('playForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const raw = wordInput.value.trim().toUpperCase();
+        if (!teams.length) return msg('Add at least two teams first.', 'error');
+
+        const teamId = teamSelect.value;
+        if (!raw) return msg('Type a word to score.');
+        if (!/^[A-Z]{2,}$/.test(raw)) return msg('Letters only, please.', 'error');
+        if (!canBuild(raw)) return msg('That word cannot be made from the current tiles.', 'error');
+
+        // Dictionary gate (optional)
+        if (document.getElementById('validateToggle').checked) {
+          if (!DICT || DICT.size === 0) return msg('Validation is on, but no dictionary is loaded.', 'error');
+          if (!DICT.has(raw.toLowerCase())) return msg('Not in dictionary.', 'error');
+        }
+
+        const points = scoreWord(raw);
+        if (teamId) recordWord(teamId, raw, points);
+        msg(`“${raw}” scores ${points} point${points===1?'':'s'}.`, 'ok');
+        wordInput.value = '';
+        wordInput.focus();
+
+        // Auto-advance to the next team
+        nextTeam();
+      });
+
+      // Init
+      drawRack();
+      addTeam('Group A');
+      addTeam('Group B');
+      // Ensure UI is in sync
+      setFromInput();
+      syncTeamSelectToCurrent();
+    });
+  </script>
+</body>
+</html>
