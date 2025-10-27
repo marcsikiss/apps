@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scattergories</title>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#94a3b8;--accent:#22d3ee;--accent2:#a78bfa}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:2rem}
+    h1{text-align:center;color:var(--accent);margin:0 0 1rem}
+    .controls{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-bottom:1rem}
+    .btn{background:var(--accent);border:none;border-radius:10px;color:#0b1220;padding:10px 14px;font-weight:700;cursor:pointer}
+    .btn.secondary{background:#1f2937;color:var(--text);border:1px solid #334155}
+    .card{background:var(--card);border-radius:14px;padding:1.5rem;margin:1rem auto;max-width:900px}
+    .big-letter{font-size:8rem;text-align:center;color:var(--accent2);margin:.25rem 0 1rem}
+    .categories{list-style:none;padding:0;margin:.5rem 0 0}
+    .categories li{background:rgba(255,255,255,.08);margin:.7rem 0;padding:1rem 1.2rem;border-radius:10px;font-size:1.6rem;line-height:1.4;text-align:center}
+    .timerWrap{display:flex;align-items:center;justify-content:center;gap:.8rem;flex-wrap:wrap;margin-top:1.5rem}
+    .timer{font-variant-numeric:tabular-nums;font-size:2.5rem;font-weight:800}
+    .field{display:flex;align-items:center;gap:.4rem;background:#0b1220;border:1px solid #334155;border-radius:10px;padding:.4rem .6rem}
+    .field input{width:4.2rem;background:transparent;border:none;color:var(--text);font-size:1rem;text-align:center;outline:none}
+    label{color:var(--muted);font-size:.9rem}
+  </style>
+</head>
+<body>
+  <h1>Scattergories</h1>
+  <div class="controls">
+    <button id="newRound" class="btn">🎲 New Round</button>
+    <button id="rerollLetter" class="btn secondary">🔤 New Letter</button>
+    <button id="rerollCats" class="btn secondary">🔁 New Categories</button>
+    <button id="fsBtn" class="btn secondary">⛶ Fullscreen</button>
+  </div>
+
+  <div class="card">
+    <h2 class="big-letter" id="letter">—</h2>
+    <ul id="categories" class="categories"></ul>
+
+    <div class="timerWrap">
+      <div class="field" title="Minutes / Seconds">
+        <label for="min">Min</label>
+        <input id="min" type="number" min="0" max="20" value="2" />
+        <label for="sec">Sec</label>
+        <input id="sec" type="number" min="0" max="59" value="0" />
+      </div>
+      <button id="startTimer" class="btn">▶️ Start</button>
+      <button id="resetTimer" class="btn secondary">⏹ Reset</button>
+      <div class="timer" id="timer">02:00</div>
+    </div>
+  </div>
+
+  <script>
+    const categories = [
+      "Things you can find in the kitchen",
+	"Household chores",
+	"Things you wear",
+	"Things in your bedroom",
+	"Things you take to school",
+	"Things you can buy in a supermarket",
+	"School subjects",
+	"Hobbies or free-time activities",
+	"Things you can do at the weekend",
+	"Jobs or professions",
+	"Things you can find in a city",
+	"Places to go on holiday",
+	"Things you can see at the beach",
+	"Means of transport",
+	"Places in a town",
+	"Things you can find in a hotel",
+	"Weather words",
+	"Sports or games",
+	"Musical instruments",	
+	"Things you do at a party",
+	"Festivals or celebrations",
+	"Types of food",
+	"Drinks",
+	"Types of music",	
+	"Animals",
+	"Things in nature",
+	"Things you can find in a garden",
+	"Fruits",
+	"Vegetables",
+	"Things that are green",
+	"Things that can fly",
+	"Things that live in water",
+	"Things with four legs",
+	"Things that are round",
+	"Things that make noise",
+	"Things that use electricity",
+	"Things that are expensive",
+	"Things that smell nice",
+	"Things that are soft",
+	"Words connected to school life",
+  	"Things that use a remote",
+	"Things in a grocery store",
+  	"Things that have stripes",
+  	"Things found in a hospital",
+  	"Weekend activities",
+  	"Words ending in \"-n\"",
+  	"Words with double letters",
+  	"Sports played indoors",
+  	"Foods you eat raw",
+  	"Things you see at the zoo",
+  	"Things you get tickets for",
+  	"Things you shouldn't touch",
+  	"Things you buy for kids",
+  	"Things that can kill you",
+  	"Words associated with winter",
+  	"Things you store items in",
+  	"Things you do every day",
+  	"Things that have buttons",
+  	"Items you take on a trip",
+  	"Things that have wheels",
+  	"Things that make you smile",
+  	"Ways to kill time",
+    ];
+
+    const allLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    const easyLetters = allLetters.filter(l => !["Q","X","Z"].includes(l));
+
+    const elLetter = document.getElementById('letter');
+    const elCats = document.getElementById('categories');
+    const elTimer = document.getElementById('timer');
+    const btnNew = document.getElementById('newRound');
+    const btnRerollCats = document.getElementById('rerollCats');
+    const btnRerollLetter = document.getElementById('rerollLetter');
+    const btnFs = document.getElementById('fsBtn');
+    const elMin = document.getElementById('min');
+    const elSec = document.getElementById('sec');
+    const btnStart = document.getElementById('startTimer');
+    const btnReset = document.getElementById('resetTimer');
+
+    function shuffle(arr){ return arr.slice().sort(()=>Math.random()-0.5); }
+    function pickLetter(){ return easyLetters[Math.floor(Math.random()*easyLetters.length)]; }
+    function pickCategories(n=5){ return shuffle(categories).slice(0,n); }
+    function renderCategories(list){ elCats.innerHTML = list.map(c => `<li>${c}</li>`).join(''); }
+
+    function newRound({rerollLetter=true, rerollCats=true}={}){
+      if(rerollLetter) elLetter.textContent = pickLetter();
+      if(rerollCats) renderCategories(pickCategories());
+      resetTimer();
+    }
+
+    btnNew.onclick = () => newRound({rerollLetter:true, rerollCats:true});
+    btnRerollCats.onclick = () => newRound({rerollLetter:false, rerollCats:true});
+    btnRerollLetter.onclick = () => newRound({rerollLetter:true, rerollCats:false});
+
+    btnFs.onclick = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
+
+    let timerInterval = null;
+    let remaining = 0;
+
+    function getDuration(){
+      let m = parseInt(elMin.value,10); if(isNaN(m)||m<0) m = 0; if(m>20) m = 20; elMin.value = m;
+      let s = parseInt(elSec.value,10); if(isNaN(s)||s<0) s = 0; if(s>59) s = 59; elSec.value = s;
+      return m*60 + s;
+    }
+
+    function updateTimerDisplay(total){
+      const t = Math.max(0, total);
+      const mm = String(Math.floor(t/60)).padStart(2,'0');
+      const ss = String(t%60).padStart(2,'0');
+      elTimer.textContent = `${mm}:${ss}`;
+      if(t<15) elTimer.style.color = '#ef4444';
+      else if(t<45) elTimer.style.color = '#f59e0b';
+      else elTimer.style.color = '#10b981';
+    }
+
+    function resetTimer(){
+      clearInterval(timerInterval);
+      remaining = getDuration();
+      updateTimerDisplay(remaining);
+    }
+
+    function startTimer(){
+      clearInterval(timerInterval);
+      if(remaining <= 0) remaining = getDuration();
+      updateTimerDisplay(remaining);
+      timerInterval = setInterval(()=>{
+        remaining -= 1;
+        updateTimerDisplay(remaining);
+        if(remaining <= 0){
+          clearInterval(timerInterval);
+          document.body.animate([{filter:'brightness(1)'},{filter:'brightness(2)'}],{duration:250,iterations:2,direction:'alternate'});
+        }
+      }, 1000);
+    }
+
+    btnStart.onclick = startTimer;
+    btnReset.onclick = resetTimer;
+
+    newRound();
+  </script>
+</body>
+</html>
