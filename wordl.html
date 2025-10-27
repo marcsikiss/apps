@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Classroom Word Guess</title>
+<style>
+  :root{
+    --bg:#f6f7fb; --text:#111827;
+    --tile:#e5e7eb; --tile-border:#cbd5e1;
+    --absent:#9aa3af; --present:#facc15; --correct:#22c55e;
+    --kbd:#e5e7eb; --kbd-border:#cbd5e1;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#0f172a;--text:#e5e7eb;--tile:#111827;--tile-border:#334155;
+      --kbd:#1f2937;--kbd-border:#334155;--absent:#475569;}
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:system-ui,Segoe UI,Inter,Roboto,Arial,sans-serif;
+    min-height:100vh;display:flex;align-items:center;justify-content:center
+  }
+  .app{width:min(860px,96vw);padding:10px;display:flex;flex-direction:column;gap:10px}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .title{font-weight:800;font-size:clamp(16px,2.2vw,24px)}
+  .controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  select,button{
+    border:1px solid var(--kbd-border);background:var(--kbd);
+    padding:6px 10px;border-radius:8px;font-weight:700;cursor:pointer;font-size:.9rem
+  }
+  .msg{text-align:center;min-height:1.4em;font-weight:600;font-size:.92rem}
+  .board{margin:4px auto 0;width:min(440px,92vw);
+    display:grid;grid-template-rows:repeat(6,1fr);gap:4px}
+  .row{display:grid;gap:4px}
+  .row.cols-5{grid-template-columns:repeat(5,1fr)}
+  .row.cols-6{grid-template-columns:repeat(6,1fr)}
+  .row.cols-7{grid-template-columns:repeat(7,1fr)}
+  .tile{
+    aspect-ratio:1/1;border:2px solid var(--tile-border);background:var(--tile);
+    border-radius:6px;display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:clamp(18px,3.2vw,26px);text-transform:uppercase
+  }
+  .tile.fill{border-color:#94a3b8}
+  .tile.absent{background:var(--absent);border-color:var(--absent);color:#fff}
+  .tile.present{background:var(--present);border-color:var(--present)}
+  .tile.correct{background:var(--correct);border-color:var(--correct)}
+  .keyboard{width:min(640px,98vw);margin:6px auto 0;display:flex;flex-direction:column;gap:4px}
+  .kbrow{display:flex;gap:4px;justify-content:center}
+  .key{
+    background:var(--kbd);border:1px solid var(--kbd-border);
+    border-radius:6px;padding:8px 6px;min-width:30px;text-align:center;
+    font-weight:800;cursor:pointer;user-select:none;font-size:.85rem
+  }
+  .key.wide{min-width:62px}
+  .key.absent{background:var(--absent);border-color:var(--absent);color:#fff}
+  .key.present{background:var(--present);border-color:var(--present)}
+  .key.correct{background:var(--correct);border-color:var(--correct)}
+  .legend{display:flex;gap:8px;justify-content:center;margin-top:4px;font-size:.82rem;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--kbd-border);border-radius:999px;background:rgba(0,0,0,.03)}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .dot.absent{background:var(--absent)} .dot.present{background:var(--present)} .dot.correct{background:var(--correct)}
+
+  /* === Popup === */
+  .overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.5);
+    display:none;align-items:center;justify-content:center;
+    z-index:100;
+  }
+  .popup{
+    background:white;color:#111;
+    padding:30px 40px;border-radius:16px;
+    text-align:center;max-width:400px;width:80%;
+    box-shadow:0 4px 20px rgba(0,0,0,0.3);
+    animation:pop 0.3s ease-out;
+  }
+  @keyframes pop{
+    from{transform:scale(0.8);opacity:0;}
+    to{transform:scale(1);opacity:1;}
+  }
+  .popup h1{font-size:2.5rem;margin:0 0 10px;color:#dc2626;}
+  .popup p{font-size:1.2rem;margin:0 0 20px;}
+  .popup button{
+    background:#22c55e;color:white;border:none;
+    padding:10px 20px;border-radius:8px;cursor:pointer;
+    font-size:1rem;font-weight:700;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="title">Classroom Word Guess <span style="opacity:.7;font-weight:600"></span></div>
+    <div class="controls">
+      <label for="lenSel" style="font-weight:700">Letters:</label>
+      <select id="lenSel"><option value="5" selected>5</option><option value="6">6</option><option value="7">7</option></select>
+      <button id="newBtn">New Word</button>
+      <button id="customBtn">Custom</button>
+      <button id="giveUpBtn">Give Up</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+  </div>
+
+  <div id="message" class="msg" aria-live="polite"></div>
+  <div id="board" class="board"></div>
+  <div class="legend">
+    <span class="pill"><span class="dot correct"></span> Correct</span>
+    <span class="pill"><span class="dot present"></span> In word</span>
+    <span class="pill"><span class="dot absent"></span> Not in word</span>
+  </div>
+  <div class="keyboard">
+    <div class="kbrow" id="kb1"></div>
+    <div class="kbrow" id="kb2"></div>
+    <div class="kbrow" id="kb3"></div>
+  </div>
+</div>
+
+<!-- Popup -->
+<div id="overlay" class="overlay">
+  <div class="popup">
+    <h1>Sorry!</h1>
+    <p id="popupWord"></p>
+    <button id="popupClose">New Word</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const WORD_BANK = {
+    5: [
+      "ABOUT","AFTER","AGAIN","AGREE","ALLOW","APPLE","BEACH","BEGIN","BELOW","BLACK","BREAD","BRING","BROWN","BUILD",
+      "CATCH","CHECK","CHILD","CLASS","CLEAN","CLEAR","CLOSE","CLOUD","COUNT","CRIME","DANCE","DREAM","EARLY","EARTH","ENJOY",
+      "EVERY","FIELD","FINAL","FIRST","FLOOR","FRUIT","GLASS","GRASS","GREEN","HAPPY","HEART","HEAVY","HOUSE","HUMAN",
+      "LARGE","LEARN","LIGHT","LUNCH","MONEY","MONTH","MUSIC","NORTH","OFTEN","OTHER","PAINT","PAPER","PARTY","PHONE",
+      "PLACE","PLANT","POINT","POWER","PRICE","QUICK","QUIET","RADIO","RIVER","ROUND","SCENE","SENSE","SERVE","SEVEN",
+      "SHAPE","SHORT","SLEEP","SMALL","SMILE","SOUND","SOUTH","SPACE","SPORT","STAGE","START","STEAL","STILL","STONE","STORY",
+      "STUDY","TABLE","TEACH","THANK","THEIR","THERE","THING","THINK","THIRD","TODAY","TRAIN","UNDER","VISIT","WATER",
+      "WATCH","WHITE","WOMAN","WORLD","WRITE","YOUNG"
+    ],
+    6: [
+      "ANIMAL","ANSWER","AUTHOR","BETTER","BOTTLE","BOTTOM","BRANCH","BRIDGE","CAMERA","CASTLE","CHANGE","CHOICE",
+      "CIRCLE","CHOOSE","CLOSED","COMMON","COTTON","DANGER","DOCTOR","DOUBLE","ENERGY","ENOUGH","FAMILY","FATHER",
+      "FINISH","FLOWER","FRIEND","FUTURE","GARDEN","HANDLE","HEALTH","HUNGRY","ISLAND","LETTER","LISTEN","LITTLE",
+      "MARKET","MEMORY","MIDDLE","MIRROR","MOBILE","MODERN","MOMENT","MOTHER","NATURE","NUMBER","OBJECT","OFFICE",
+      "ONLINE","PEOPLE","PERSON","PLEASE","POLICE","PRETTY","PUBLIC","REASON","RETURN","RESULT","SECOND","SIMPLE","SINGLE",
+      "SOCIAL","SPRING","SUMMER","SYSTEM","TRAVEL","WINNER","WINTER","YELLOW"
+    ],
+    7: [
+      "ALREADY","ANOTHER","BECAUSE","BETWEEN","BROTHER","CAPITAL","CAREFUL","CERTAIN","CHANNEL","COMPANY","CORRECT",
+      "COUNTRY","CULTURE","CURIOUS","EVENING","ESCAPE","EXAMPLE","FEELING","FREEDOM","HEALTHY","HISTORY","HOLIDAY","HUNDRED",
+      "LIBRARY","MORNING","NATURAL","NOTHING","OPINION","PATIENT","PRESENT","PROBLEM","PROJECT","READING","SCIENCE",
+      "SPECIAL","STATION","STUDENT","SUBJECT","TEACHER","THROUGH","TRAFFIC","TROUBLE","WEATHER","WEEKEND","WITHOUT",
+      "VILLAGE","AIRPORT","AVERAGE","CLOTHES","COLLEGE","CONCERT","FOREIGN","MESSAGE","PICTURE","PURPOSE",
+      "BALANCE","SIMILAR","SUCCESS","SUPPORT","TONIGHT","VISITOR","PACKAGE",
+    ]
+  };
+
+  const boardEl=document.getElementById("board");
+  const msgEl=document.getElementById("message");
+  const lenSel=document.getElementById("lenSel");
+  const newBtn=document.getElementById("newBtn");
+  const customBtn=document.getElementById("customBtn");
+  const giveUpBtn=document.getElementById("giveUpBtn");
+  const resetBtn=document.getElementById("resetBtn");
+  const overlay=document.getElementById("overlay");
+  const popupWord=document.getElementById("popupWord");
+  const popupClose=document.getElementById("popupClose");
+
+  const kbEls={};
+  [["kb1","QWERTYUIOP"],["kb2","ASDFGHJKL"],["kb3","ZXCVBNM"]].forEach(([id,keys],i)=>{
+    const wrap=document.getElementById(id);
+    if(i===2)addKey(wrap,"Backspace","⌫",true);
+    keys.split("").forEach(ch=>addKey(wrap,ch,ch));
+    if(i===2)addKey(wrap,"Enter","Enter",true);
+  });
+  function addKey(container,key,label,wide=false){
+    const k=document.createElement("div");
+    k.className="key"+(wide?" wide":"");
+    k.textContent=label;
+    k.onclick=()=>handleKey(key);
+    container.appendChild(k);
+    if(/^[A-Z]$/.test(key)) kbEls[key]=k;
+  }
+
+  const ROWS=6;
+  let COLS=parseInt(lenSel.value,10);
+  let grid=[],target="",curRow=0,curCol=0,locked=false;
+
+  function pickRandom(){
+    const list=WORD_BANK[COLS];return list[Math.floor(Math.random()*list.length)];
+  }
+  function setMessage(t="",good=false){msgEl.textContent=t;msgEl.style.color=good?"var(--correct)":"inherit";}
+  function buildBoard(){
+    boardEl.innerHTML="";grid=[];
+    for(let r=0;r<ROWS;r++){
+      const rowEl=document.createElement("div");
+      rowEl.className="row cols-"+COLS;
+      const row=[];
+      for(let c=0;c<COLS;c++){const t=document.createElement("div");t.className="tile";rowEl.appendChild(t);row.push(t);}
+      boardEl.appendChild(rowEl);grid.push(row);
+    }
+  }
+  function colorKey(ch,status){
+    const el=kbEls[ch];if(!el)return;
+    const rank={absent:0,present:1,correct:2};
+    const cur=el.classList.contains("correct")?"correct":(el.classList.contains("present")?"present":(el.classList.contains("absent")?"absent":null));
+    if(!cur||rank[status]>rank[cur]){el.classList.remove("absent","present","correct");el.classList.add(status);}
+  }
+  function scoreGuess(g,a){
+    const res=Array(COLS).fill("absent"),cnt={};
+    for(let i=0;i<COLS;i++)cnt[a[i]]=(cnt[a[i]]||0)+1;
+    for(let i=0;i<COLS;i++)if(g[i]===a[i]){res[i]="correct";cnt[g[i]]--;}
+    for(let i=0;i<COLS;i++){if(res[i]==="correct")continue;if(cnt[g[i]]>0){res[i]="present";cnt[g[i]]--;}}
+    return res;
+  }
+  function showPopup(){
+    popupWord.textContent=`The word was ${target}.`;
+    overlay.style.display="flex";
+  }
+  function hidePopup(){
+    overlay.style.display="none";
+    newRandom();
+  }
+  popupClose.onclick=hidePopup;
+  overlay.onclick=e=>{if(e.target===overlay)hidePopup();};
+
+  function submitGuess(){
+    const guess=grid[curRow].map(t=>t.textContent||" ").join("");
+    if(!new RegExp("^[A-Z]{"+COLS+"}$").test(guess)){setMessage(`Enter ${COLS} letters.`);return;}
+    const res=scoreGuess(guess,target);
+    for(let i=0;i<COLS;i++){const t=grid[curRow][i];t.classList.remove("fill");t.classList.add(res[i]);colorKey(guess[i],res[i]);}
+    if(guess===target){locked=true;setMessage(`You won! (${target})`,true);return;}
+    curRow++;curCol=0;
+    if(curRow>=ROWS){locked=true;showPopup();}
+  }
+  function handleKey(k){
+    if(locked&&k!=="Enter")return;
+    if(k==="Backspace"){if(curCol>0){curCol--;const t=grid[curRow][curCol];t.textContent="";t.classList.remove("fill");}return;}
+    if(k==="Enter"){if(curCol<COLS){setMessage(`Need ${COLS} letters.`);}else submitGuess();return;}
+    if(/^[A-Z]$/.test(k)&&curCol<COLS&&!locked){const t=grid[curRow][curCol];t.textContent=k;t.classList.add("fill");curCol++;}
+  }
+  function resetBoard(){buildBoard();Object.values(kbEls).forEach(el=>el.classList.remove("absent","present","correct"));
+    curRow=0;curCol=0;locked=false;setMessage(`Type or click letters. (${COLS} letters)`);}
+  function newRandom(){target=pickRandom();resetBoard();}
+  function giveUp(){if(locked)return;locked=true;showPopup();}
+  function setCustom(){const w=prompt(`Enter a ${COLS}-letter word:`,"");if(!w)return;const c=w.toUpperCase().replace(/[^A-Z]/g,"");
+    if(c.length!==COLS){alert(`Please enter exactly ${COLS} letters.`);return;}target=c;resetBoard();}
+  window.addEventListener("keydown",e=>{const k=e.key.length===1?e.key.toUpperCase():e.key;if(k==="Enter"&&locked){hidePopup();return;}
+    if(/^[A-Z]$|^Enter$|^Backspace$/.test(k))handleKey(k);});
+  newBtn.onclick=newRandom;customBtn.onclick=setCustom;giveUpBtn.onclick=giveUp;resetBtn.onclick=resetBoard;
+  lenSel.addEventListener("change",()=>{COLS=parseInt(lenSel.value,10);newRandom();});
+  buildBoard();newRandom();
+})();
+</script>
+</body>
+</html>
