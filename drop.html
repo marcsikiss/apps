@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Million Pound Drop</title>
+<style>
+  :root{
+    --bg:#0e0f13; --panel:#191b22; --accent:#e53935; --ok:#29b35b; --text:#f3f5f7; --muted:#aab2c0;
+    --slot:#262a33; --chip:#f7f7fb;
+    --teamA:#e5484d; --teamB:#2ea0ff; --teamC:#2ecc71; --teamD:#a66bff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0}
+  body{
+    font-family:system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color:var(--text);
+    background: radial-gradient(1000px 520px at 50% -10%, #202635, #0e0f13 60%);
+    overflow:hidden; /* no page scrolling */
+    display:flex; flex-direction:column;
+  }
+  header{
+    flex:0 0 auto;
+    display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px;
+    padding:10px 14px; background:linear-gradient(#22283a,#171a24); border-bottom:1px solid #2a2f3d;
+  }
+  .brand{font-weight:800; letter-spacing:.4px; font-size:clamp(14px,2vw,18px)}
+  .controls{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; align-items:center}
+  button{
+    background:var(--panel); color:var(--text); border:1px solid #2a2f3d; padding:6px 10px;
+    border-radius:10px; font-weight:700; cursor:pointer; transition:.2s;
+    font-size:clamp(12px,1.6vw,14px)
+  }
+  button:disabled{opacity:.45; cursor:not-allowed}
+  button.primary{background:var(--accent); border-color:#bb2a28}
+  button.ok{background:var(--ok); border-color:#1b8a45}
+  button:hover:not(:disabled){transform:translateY(-1px)}
+  select{
+    background:#0f131c; color:#e8ecf5; border:1px solid #2a2f3d; border-radius:10px; padding:6px 8px; font-weight:700;
+    font-size:clamp(12px,1.6vw,14px)
+  }
+  label{font-size:clamp(11px,1.5vw,12px); color:var(--muted); display:flex; gap:6px; align-items:center}
+
+  main{
+    flex:1 1 auto; max-width:1200px; margin:0 auto; padding:10px 14px;
+    display:grid; grid-template-rows:auto 1fr; gap:10px; width:100%;
+  }
+
+  .board{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px;}
+  .card{background:var(--panel); border:1px solid #2a2f3d; border-radius:14px; padding:10px 12px; box-shadow:0 6px 20px rgba(0,0,0,.25);}
+  .team{display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:12px; font-weight:800;}
+  .team.A{background:linear-gradient(90deg, rgba(229,72,77,.18), transparent 60%); border:1px solid rgba(229,72,77,.45)}
+  .team.B{background:linear-gradient(90deg, rgba(46,160,255,.18), transparent 60%); border:1px solid rgba(46,160,255,.45)}
+  .team.C{background:linear-gradient(90deg, rgba(46,204,113,.18), transparent 60%); border:1px solid rgba(46,204,113,.45)}
+  .team.D{background:linear-gradient(90deg, rgba(166,107,255,.18), transparent 60%); border:1px solid rgba(166,107,255,.45)}
+  .money{font-variant-numeric:tabular-nums; font-size:clamp(16px,2.2vw,20px)}
+  .pill{padding:2px 8px; border-radius:999px; font-weight:800; font-size:clamp(12px,1.8vw,14px)}
+  .pill.A{background:rgba(229,72,77,.22); color:#ffd9db}
+  .pill.B{background:rgba(46,160,255,.22); color:#e3f2ff}
+  .pill.C{background:rgba(46,204,113,.22); color:#e6ffef}
+  .pill.D{background:rgba(166,107,255,.22); color:#f0e6ff}
+  .sub{margin-top:4px; color:var(--muted); font-size:clamp(11px,1.7vw,12px)}
+
+  .qa{
+    display:grid; grid-template-rows:auto 1fr auto; gap:8px;
+    min-height:0;
+  }
+  .question{
+    background:linear-gradient(#2b3144,#202538); border:1px solid #384058; border-radius:14px; padding:10px 12px;
+    font-size:clamp(18px,2.6vw,26px); font-weight:900; text-align:center; text-shadow:0 2px 0 rgba(0,0,0,.2);
+  }
+  .answers{
+    display:grid; grid-template-columns:repeat(2,1fr); gap:10px;
+    min-height:0;
+  }
+  .answer{
+    position:relative; background:var(--slot); border:2px solid #31384a; border-radius:14px; padding:8px; overflow:hidden;
+    cursor:pointer; display:flex; flex-direction:column; min-height:0;
+  }
+  .answer.active{border-color:#f7c948; box-shadow:0 0 0 3px rgba(247,201,72,.25) inset}
+  .answer.correct{outline:3px solid var(--ok)}
+  .answer.wrong.revealed{animation:shake .35s 2}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+  .answer h3{margin:0 0 6px 0; font-size:clamp(14px,2vw,16px); font-weight:800; color:#e7eaf1}
+  .stack{
+    display:flex; flex-wrap:wrap; gap:6px; align-items:flex-end; padding-bottom:6px;
+    overflow:auto; scrollbar-width:thin; scrollbar-color:#3b4255 transparent;
+  }
+
+  .tray{
+    background:#141821; border:1px dashed #3b4255; border-radius:12px; padding:8px; min-height:70px;
+    display:grid; grid-template-rows:auto 1fr; gap:6px; overflow:hidden;
+  }
+  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .toolbar h4{margin:0; color:var(--muted); font-weight:700; letter-spacing:.2px; font-size:clamp(12px,1.8vw,14px)}
+  .chips{display:flex; flex-wrap:wrap; gap:6px; overflow:auto; scrollbar-width:thin; scrollbar-color:#3b4255 transparent}
+
+  .chip{
+    width:68px; height:34px; border-radius:9px; display:grid; place-items:center; font-weight:900;
+    font-size:clamp(12px,1.8vw,14px);
+    background:var(--chip); color:#1a1d25; box-shadow:inset 0 -3px 0 rgba(0,0,0,.15), 0 6px 14px rgba(0,0,0,.35);
+    border:2px solid #e3e5ef; cursor:grab; user-select:none;
+  }
+  .chip.A{border-color:var(--teamA); background:linear-gradient(#fff,#ffe8e9)}
+  .chip.B{border-color:var(--teamB); background:linear-gradient(#fff,#e7f2ff)}
+  .chip.C{border-color:var(--teamC); background:linear-gradient(#fff,#e8ffe9)}
+  .chip.D{border-color:var(--teamD); background:linear-gradient(#fff,#f0e6ff)}
+  .chip.locked{opacity:.6; cursor:not-allowed}
+  .chip.dragging{opacity:.65; transform:rotate(2deg) scale(1.02)}
+  .chip.drop{animation:drop .5s forwards ease-in}
+  @keyframes drop{to{transform: translateY(190px) rotate(12deg); opacity:0}}
+
+  dialog{border:none; border-radius:16px; width:min(820px,92vw); padding:0; overflow:hidden;}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .dlg-head{padding:14px 16px; background:#1d2331; color:#e9edf6; font-weight:900}
+  .dlg-body{padding:14px}
+  .dlg-body textarea{width:100%; min-height:260px; resize:vertical; background:#0f131c; color:#e9edf6;
+    border:1px solid #2a2f3d; border-radius:10px; padding:10px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px}
+  .dlg-actions{display:flex; gap:8px; justify-content:flex-end; padding:12px; background:#141824}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">🎲 Million Pound Drop</div>
+    <div class="controls">
+      <label>Teams:
+        <select id="teamCount">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </label>
+    </div>
+    <div class="controls">
+      <button id="loadBtn" title="Load questions JSON">Load Questions</button>
+      <button id="resetBtn">Reset Game</button>
+      <button id="switchBtn">Switch Team</button>
+      <button id="allInBtn">Put ALL on Selected</button>
+      <button id="lockBtn" class="primary">Lock Current Team</button>
+      <button id="revealBtn" class="ok" disabled>Reveal All</button>
+      <button id="nextBtn" disabled>Next</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="scoreboard" class="board"></section>
+
+    <section class="qa">
+      <div class="question" id="questionText">Loading question…</div>
+      <div class="answers" id="answers"></div>
+
+      <div class="tray">
+        <div class="toolbar">
+          <h4 style="margin-right:auto">Drag your team’s <b>£100k</b> bundles. Click an answer to select it for <i>Put ALL on Selected</i>.</h4>
+          <div>Bundles this turn: <b><span id="bundlesLeft">10</span></b></div>
+        </div>
+        <div class="chips" id="chipTray"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Load Questions -->
+  <dialog id="qDialog">
+    <div class="dlg-head">Load your own questions (JSON)</div>
+    <div class="dlg-body">
+      <p>Format:</p>
+      <pre style="white-space:pre-wrap; background:#0f131c; padding:10px; border-radius:8px; border:1px solid #2a2f3d; font-size:12px; line-height:1.45;">
+[
+  { "q":"Whose head appears on British 10p coins?",
+    "answers":["Mickey Mouse","Tony Blair","The Queen","Terry Wogan"],
+    "correct": 2 }
+]
+      </pre>
+      <textarea id="qInput"></textarea>
+    </div>
+    <div class="dlg-actions">
+      <button id="qCancel">Cancel</button>
+      <button id="qApply" class="ok">Load</button>
+    </div>
+  </dialog>
+
+  <!-- Winner dialog -->
+  <dialog id="winDialog">
+    <div class="dlg-head">Final Results</div>
+    <div class="dlg-body" id="winBody"></div>
+    <div class="dlg-actions">
+      <button id="winClose" class="ok">OK</button>
+    </div>
+  </dialog>
+
+<script>
+/* ===================== DATA ===================== */
+let QUESTIONS = [
+  { q: "Whose head appears on British 10p coins?",
+    answers: ["Mickey Mouse","Tony Blair","The Queen","Terry Wogan"],
+    correct: 2 },
+  { q: "Which planet is known as the Red Planet?",
+    answers: ["Venus","Mars","Jupiter","Saturn"],
+    correct: 1 },
+  { q: "How many minutes are there in three hours?",
+    answers: ["120","150","160","180"],
+    correct: 3 },
+  { q: "Which language has the most native speakers?",
+    answers: ["English","Mandarin Chinese","Spanish","Hindi"],
+    correct: 1 }
+];
+
+const CHIP_VALUE = 100000;      // £100k per chip
+const START_BANK = 1000000;     // £1,000,000
+const TEAM_DEFS = [
+  { id:"A", name:"Team A", color:"var(--teamA)"},
+  { id:"B", name:"Team B", color:"var(--teamB)"},
+  { id:"C", name:"Team C", color:"var(--teamC)"},
+  { id:"D", name:"Team D", color:"var(--teamD)"}
+];
+
+let teamCount = 2;
+let TEAMS = [];
+let locks = {};      // {A:false, B:false, ...}
+let qIndex = 0;
+let currentTeamIndex = 0;
+let revealed = false;
+let activeAnswerIndex = null;
+
+/* ===================== HELPERS ===================== */
+const el = sel => document.querySelector(sel);
+const fmt = n => "£" + n.toLocaleString("en-GB");
+const currentTeam = () => TEAMS[currentTeamIndex];
+const everyoneLocked = () => TEAMS.every(t => locks[t.id]);
+const aliveTeams = () => TEAMS.filter(t => t.bank > 0);
+
+function bundlesForTeam(team){
+  return Math.min(10, Math.floor(team.bank / CHIP_VALUE)); // up to 10 chips per £1m
+}
+
+function updateBanks(){
+  TEAMS.forEach(t=>{
+    const node = el(`#bank${t.id}`);
+    if(node) node.textContent = fmt(t.bank);
+  });
+}
+
+function setTurnPill(){
+  TEAMS.forEach(t=>{
+    const pill = el(`#pill${t.id}`);
+    if(!pill) return;
+    pill.textContent = (t.id===currentTeam().id ? "► " : "") + t.name;
+    pill.className = `pill ${t.id}`;
+  });
+}
+
+/* ===================== RENDER ===================== */
+function renderScoreboard(){
+  const sb = el("#scoreboard");
+  sb.innerHTML = "";
+  TEAMS.forEach(t=>{
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="team ${t.id}">
+        <div class="name"><span id="pill${t.id}" class="pill ${t.id}">${t.name}</span></div>
+        <div class="money" id="bank${t.id}">${fmt(t.bank)}</div>
+      </div>
+      <div class="sub">${locks[t.id] ? "Locked" : "Placing…"}</div>`;
+    sb.appendChild(card);
+  });
+  setTurnPill();
+}
+
+function addDropTargets(box){
+  const stack = box.querySelector(".stack");
+  const prevent = e => e.preventDefault();
+  [box, stack].forEach(t=>{
+    t.addEventListener("dragover", prevent);
+    t.addEventListener("drop", onDropChip);
+  });
+  box.addEventListener("click", ()=>{
+    document.querySelectorAll(".answer").forEach(a=>a.classList.remove("active"));
+    box.classList.add("active");
+    activeAnswerIndex = parseInt(box.dataset.answerIndex,10);
+  });
+}
+
+function makeChip(teamId){
+  const c = document.createElement("div");
+  c.className = "chip " + teamId;
+  c.draggable = true;
+  c.dataset.team = teamId;
+  c.textContent = "£100k";
+  c.addEventListener("dragstart", e=>{
+    if(locks[teamId]){ e.preventDefault(); return; }
+    c.classList.add("dragging");
+    e.dataTransfer.setData("text/plain","chip");
+  });
+  c.addEventListener("dragend", ()=> c.classList.remove("dragging"));
+  return c;
+}
+
+function refillTray(){
+  const tray = el("#chipTray");
+  tray.innerHTML = "";
+  const count = bundlesForTeam(currentTeam());
+  el("#bundlesLeft").textContent = count;
+  for(let i=0;i<count;i++) tray.appendChild(makeChip(currentTeam().id));
+  const prevent = e => e.preventDefault();
+  tray.addEventListener("dragover", prevent);
+  tray.addEventListener("drop", e=>{
+    e.preventDefault();
+    const chip = document.querySelector(".chip.dragging");
+    if(!chip) return;
+    if(locks[chip.dataset.team]) return;
+    tray.appendChild(chip);
+  }, {once:false});
+}
+
+function renderQuestion(){
+  const q = QUESTIONS[qIndex];
+  el("#questionText").textContent = `Q${qIndex+1}. ${q.q}`;
+
+  const wrap = el("#answers");
+  wrap.innerHTML = "";
+  q.answers.forEach((txt, i) => {
+    const box = document.createElement("div");
+    box.className = "answer";
+    box.dataset.answerIndex = i;
+    box.innerHTML = `<h3>${String.fromCharCode(65+i)}. ${txt}</h3>
+                     <div class="stack"></div>`;
+    wrap.appendChild(box);
+    addDropTargets(box);
+  });
+
+  // reset per-question state
+  TEAMS.forEach(t=> locks[t.id]=false);
+  revealed = false;
+  activeAnswerIndex = null;
+  currentTeamIndex = 0;
+  renderScoreboard();
+  refillTray();
+  el("#revealBtn").disabled = true;
+  el("#nextBtn").disabled = true;
+  el("#lockBtn").disabled = false;
+}
+
+function onDropChip(e){
+  e.preventDefault();
+  const chip = document.querySelector(".chip.dragging");
+  if(!chip) return;
+  const teamId = chip.dataset.team;
+  if(locks[teamId]) return;
+
+  const answer = e.currentTarget.classList.contains("answer")
+    ? e.currentTarget
+    : e.currentTarget.closest(".answer");
+  const dest = answer.querySelector(".stack");
+  dest.appendChild(chip);
+}
+
+/* ===================== GAME FLOW ===================== */
+function switchTeam(){
+  // find next unlocked team
+  for(let i=1;i<=TEAMS.length;i++){
+    const idx = (currentTeamIndex + i) % TEAMS.length;
+    if(!locks[TEAMS[idx].id]){
+      currentTeamIndex = idx;
+      setTurnPill();
+      refillTray();
+      return true;
+    }
+  }
+  return false; // nobody available
+}
+
+function lockCurrentTeam(){
+  const id = currentTeam().id;
+  if(locks[id]) return;
+  document.querySelectorAll(`.chip.${id}`).forEach(c=>{ c.classList.add("locked"); c.draggable=false; });
+  locks[id] = true;
+  renderScoreboard();
+
+  if(everyoneLocked()){
+    el("#revealBtn").disabled = false;
+    el("#lockBtn").disabled = true;
+    el("#chipTray").innerHTML = "";
+  } else {
+    switchTeam();
+  }
+}
+
+function putAllOnSelected(){
+  if(activeAnswerIndex===null){ alert("Click an answer first to select it."); return; }
+  const id = currentTeam().id;
+  if(locks[id]) return;
+  const tray = el("#chipTray");
+  const chips = [...tray.querySelectorAll(`.chip.${id}`)];
+  if(chips.length===0) return;
+  const box = document.querySelector(`.answer[data-answer-index="${activeAnswerIndex}"] .stack`);
+  chips.forEach(c=> box.appendChild(c));
+}
+
+function revealAll(){
+  if(revealed || !everyoneLocked()) return;
+  revealed = true;
+
+  const q = QUESTIONS[qIndex];
+  const boxes = [...document.querySelectorAll(".answer")];
+  boxes.forEach((b,i)=>{
+    if(i === q.correct) b.classList.add("correct");
+    else b.classList.add("wrong","revealed");
+  });
+
+  function settleTeam(teamId){
+    const wrongBoxes = boxes.filter((_,i)=> i!==q.correct);
+    let lost = 0;
+    wrongBoxes.forEach(b=>{
+      const chips = [...b.querySelectorAll(`.chip.${teamId}`)];
+      chips.forEach(ch => ch.classList.add("drop"));
+      setTimeout(()=> chips.forEach(ch=> ch.remove()), 520);
+      lost += chips.length;
+    });
+    const lossValue = lost * CHIP_VALUE;
+    const team = TEAMS.find(t=>t.id===teamId);
+    team.bank = Math.max(0, team.bank - lossValue);
+  }
+
+  TEAMS.forEach(t=> settleTeam(t.id));
+  setTimeout(()=>{
+    updateBanks();
+
+    const alive = aliveTeams();
+    if(alive.length === 0){
+      showWinners("All money has been lost. Game over!");
+      return;
+    }
+    if(alive.length === 1){
+      showWinners(`${alive[0].name} is the last team with money. Game over!`);
+      return;
+    }
+
+    // continue to next question as normal
+    el("#revealBtn").disabled = true;
+    el("#nextBtn").disabled = false;
+  }, 540);
+}
+
+function nextStep(){
+  // last question?
+  if(qIndex === QUESTIONS.length - 1){
+    showWinners();
+    return;
+  }
+  // clear board chips and go next
+  document.querySelectorAll(".chip").forEach(c=> c.remove());
+  qIndex++;
+  renderQuestion();
+}
+
+function showWinners(reason){
+  const ranked = [...TEAMS].sort((a,b)=> b.bank - a.bank);
+  const top = ranked[0].bank;
+  const winners = ranked.filter(t=> t.bank===top);
+  const winBody = el("#winBody");
+  let html = "";
+  if(reason){ html += `<p style="margin-top:0"><b>${reason}</b></p>`; }
+  else { html += `<p style="margin-top:0">All questions answered. Final standings:</p>`; }
+  html += `<ol>`;
+  ranked.forEach(t=> html += `<li><b>${t.name}</b> — ${fmt(t.bank)}</li>`);
+  html += `</ol>`;
+  html += `<p><b>Winner${winners.length>1?'s':''}:</b> ${winners.map(w=>w.name).join(', ')} with ${fmt(top)}!</p>`;
+  winBody.innerHTML = html;
+  el("#winDialog").showModal();
+
+  // disable forward actions
+  el("#nextBtn").disabled = true;
+  el("#revealBtn").disabled = true;
+  el("#lockBtn").disabled = true;
+  el("#chipTray").innerHTML = "";
+}
+
+function resetGame(){
+  TEAMS.forEach(t=> t.bank = START_BANK);
+  updateBanks();
+  qIndex = 0;
+  renderQuestion();
+}
+
+/* ===================== QUESTIONS ===================== */
+function openLoadDialog(){
+  const dlg = el("#qDialog");
+  el("#qInput").value = JSON.stringify(QUESTIONS, null, 2);
+  dlg.showModal();
+}
+function applyQuestions(){
+  const txt = el("#qInput").value.trim();
+  try{
+    const arr = JSON.parse(txt);
+    if(!Array.isArray(arr) || !arr.length) throw new Error("Provide a non-empty array.");
+    arr.forEach((o,i)=>{
+      if(typeof o.q!=="string" || !Array.isArray(o.answers) || typeof o.correct!=="number"){
+        throw new Error("Bad format at item "+(i+1));
+      }
+    });
+    QUESTIONS = arr;
+    qIndex = 0;
+    el("#qDialog").close();
+    renderQuestion();
+  }catch(err){ alert("Could not load questions: " + err.message); }
+}
+
+/* ===================== INIT ===================== */
+function rebuildTeams(){
+  teamCount = parseInt(el("#teamCount").value,10);
+  TEAMS = TEAM_DEFS.slice(0, teamCount).map(d=> ({...d, bank: START_BANK}));
+  locks = Object.fromEntries(TEAMS.map(t=> [t.id,false]));
+  renderScoreboard();
+  updateBanks();
+}
+
+function init(){
+  rebuildTeams();
+  renderQuestion();
+
+  // handlers
+  el("#lockBtn").addEventListener("click", lockCurrentTeam);
+  el("#switchBtn").addEventListener("click", ()=> { if(!revealed) { switchTeam(); }});
+  el("#revealBtn").addEventListener("click", revealAll);
+  el("#nextBtn").addEventListener("click", nextStep);
+  el("#resetBtn").addEventListener("click", resetGame);
+  el("#loadBtn").addEventListener("click", openLoadDialog);
+  el("#qCancel").addEventListener("click", ()=> el("#qDialog").close());
+  el("#qApply").addEventListener("click", applyQuestions);
+  el("#winClose").addEventListener("click", ()=> el("#winDialog").close());
+  el("#teamCount").addEventListener("change", ()=> { resetGame(); rebuildTeams(); });
+  el("#allInBtn").addEventListener("click", putAllOnSelected);
+}
+init();
+</script>
+</body>
+</html>
