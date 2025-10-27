@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Classroom Boggle</title>
+  <style>
+    :root{--bg:#0f172a;--panel:#0b1020;--text:#e5e7eb;--muted:#9ca3af;--accent:#22d3ee;--bad:#f87171;}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(1200px 800px at 70% -10%,#1f2937,var(--bg));color:var(--text);
+         font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px;
+           background:rgba(17,24,39,.7);border-bottom:1px solid #1f2937;backdrop-filter:blur(6px)}
+    h1{font-size:18px;margin:0}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    button,select{background:var(--panel);color:var(--text);border:1px solid #26314a;padding:8px 12px;
+                  border-radius:12px;font-weight:700}
+    button.primary{background:linear-gradient(120deg,#22d3ee,#a78bfa);color:#0b1020;border:none}
+    main{display:grid;place-items:center;padding:18px}
+    .board{display:grid;grid-template-columns:repeat(4,minmax(90px,1fr));gap:12px;max-width:92vmin;width:92vmin}
+    .tile{display:grid;place-items:center;height:22vmin;max-height:160px;aspect-ratio:1/1;
+          border-radius:18px;background:linear-gradient(180deg,#0b1020,#0a0f1e);border:1px solid #26314a;
+          font-size:clamp(28px,6vmin,54px);font-weight:900;letter-spacing:.6px;user-select:none}
+    .status{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:16px;flex-wrap:wrap}
+    .pill{padding:6px 10px;border:1px solid #1f2937;border-radius:999px;background:#0b1020;color:#cbd5e1}
+    .timer{font-variant-numeric:tabular-nums;font-weight:900;font-size:clamp(32px,10vmin,96px);
+           padding:6px 14px;border:1px solid #1f2937;border-radius:12px;background:#0b1020}
+    .timer.running{outline:3px solid var(--accent)}
+    .timer.done{outline:3px solid var(--bad);color:var(--bad)}
+    footer{color:#94a3b8;padding:12px 16px;text-align:center}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔤 Classroom Boggle</h1>
+    <div class="controls">
+      <label class="pill">Duration
+        <select id="duration" style="background:transparent;border:none;color:inherit;font-weight:900;margin-left:6px">
+          <option value="60">1:00</option>
+          <option value="90">1:30</option>
+          <option value="120" selected>2:00</option>
+          <option value="180">3:00</option>
+        </select>
+      </label>
+      <span id="timer" class="timer">02:00</span>
+      <button id="startStop" class="primary">Start 2:00</button>
+      <button id="newBoard">New Board</button>
+      <button id="fullscreen" title="Toggle fullscreen">Fullscreen</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="board" class="board" aria-label="4 by 4 letter grid" role="grid"></div>
+    <div class="status">
+      <span class="pill">Seed: <strong id="seed">—</strong></span>
+      <span class="pill">Min length: <strong>3</strong></span>
+      <span class="pill">Adjacency: <strong>orthogonal + diagonal</strong></span>
+    </div>
+  </main>
+
+  <footer>Project, set 2 minutes, and let pairs shout words. No clicks needed. © 2025 • MIT</footer>
+
+  <script>
+    // --- RNG + letters (weighted English, with friendly QU tile) ---
+    function seededRng(seed){let h=1779033703^seed.length,i=0;for(;i<seed.length;i++)h=Math.imul(h^seed.charCodeAt(i),3432918353),h=(h<<13)|(h>>>19);
+      return function(){h=Math.imul(h^(h>>>16),2246822507);h=Math.imul(h^(h>>>13),3266489909);const t=(h^=h>>>16)>>>0;return t/4294967296};}
+    const WEIGHTS={A:8,B:2,C:3,D:4,E:11,F:2,G:3,H:2,I:7,J:1,K:1,L:5,M:3,N:6,O:7,P:3,Q:0.4,R:6,S:6,T:9,U:3,V:1,W:2,X:0.4,Y:2,Z:0.4};
+    function pickLetter(rng){const es=Object.entries(WEIGHTS);const sum=es.reduce((a,[,w])=>a+w,0);let t=rng()*sum;for(const [ch,w] of es){if((t-=w)<=0) return ch;}return 'E';}
+    function maybeQU(ch,r){return ch==='Q'?(r()<0.85?'QU':'Q'):ch;}
+
+    // --- Elements ---
+    const boardEl=document.getElementById('board');
+    const seedEl=document.getElementById('seed');
+    const timerEl=document.getElementById('timer');
+    const durationSel=document.getElementById('duration');
+    const startStopBtn=document.getElementById('startStop');
+
+    // --- Board state ---
+    let seed=''; let rng=seededRng('init'); let grid=[];
+    function newSeed(){ seed=Math.random().toString(36).slice(2,9).toUpperCase(); rng=seededRng(seed); seedEl.textContent=seed; }
+    function genBoard(){ grid=Array.from({length:16},()=>maybeQU(pickLetter(rng),rng)); draw(); }
+    function draw(){ boardEl.innerHTML=''; grid.forEach((ch,i)=>{ const b=document.createElement('div'); b.className='tile'; b.textContent=ch; b.setAttribute('role','gridcell'); b.setAttribute('aria-label',ch); boardEl.appendChild(b); }); }
+
+    // --- Timer ---
+    let duration=parseInt(durationSel.value,10), remaining=duration, tickId=null;
+    const fmt=n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+    function paintTimer(){ timerEl.textContent=fmt(remaining); timerEl.classList.toggle('running',!!tickId); }
+    function resetTimer(){ remaining=duration; clearInterval(tickId); tickId=null; timerEl.classList.remove('done'); paintTimer();
+      startStopBtn.textContent=`Start ${fmt(duration)}`; }
+    function tick(){ if(remaining>0){ remaining--; paintTimer(); if(remaining===0){ clearInterval(tickId); tickId=null; timerEl.classList.remove('running'); timerEl.classList.add('done'); startStopBtn.textContent='Restart'; new AudioContext().resume?.(); } } }
+    function start(){ if(remaining<=0) remaining=duration; clearInterval(tickId); tickId=setInterval(tick,1000); paintTimer(); startStopBtn.textContent='Pause'; }
+    function pause(){ clearInterval(tickId); tickId=null; paintTimer(); startStopBtn.textContent='Resume'; }
+
+    // --- Events ---
+    durationSel.addEventListener('change',()=>{ duration=parseInt(durationSel.value,10); resetTimer(); startStopBtn.focus(); });
+    startStopBtn.addEventListener('click',()=>{ tickId?pause():start(); });
+    document.getElementById('newBoard').addEventListener('click',()=>{ newSeed(); genBoard(); resetTimer(); });
+    document.getElementById('fullscreen').addEventListener('click',async()=>{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen?.(); } else { await document.exitFullscreen?.(); }});
+
+    // Keyboard: Space = start/pause, N = new board
+    window.addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); tickId?pause():start(); } if(e.key.toLowerCase()==='n'){ newSeed(); genBoard(); resetTimer(); }});
+
+    // --- Init ---
+    newSeed(); genBoard(); resetTimer(); // ready to project
+  </script>
+</body>
+</html>
