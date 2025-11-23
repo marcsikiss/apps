@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A–Z Definition Challenge (Glossary • Random per letter)</title>
+<style>
+  :root{ --bg:#f7f8fb; --panel:#fff; --ring:#e5e7eb; --ink:#1f2937; --muted:#6b7280; --primary:#2563eb; }
+  *{box-sizing:border-box}
+  body{ margin:0; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink);
+        min-height:100vh; display:flex; gap:24px; padding:24px; }
+  .board{ flex:1; background:var(--panel); border-radius:20px; position:relative; display:grid; place-items:center;
+          box-shadow:0 10px 25px rgba(0,0,0,.08); padding:10px; }
+  .ring{ width:min(80vh,70vw); height:min(80vh,70vw); border:2px dashed var(--ring); border-radius:50%; position:relative; }
+  .letter{ position:absolute; width:58px; height:58px; border-radius:999px; display:grid; place-items:center; background:#f3f4f6;
+           font-weight:800; color:#111827; box-shadow:0 2px 6px rgba(0,0,0,.08); cursor:pointer; user-select:none; transition:transform .15s; }
+  .letter:hover{transform:translateY(-2px)} .letter.active{outline:3px solid var(--primary); background:#eef2ff}
+  .letter.solved{background:#dcfce7; color:#14532d} .letter.passed{background:#fff7ed; color:#7c2d12}
+
+  .centerBox{ position:absolute; width:360px; max-width:90%; background:var(--panel); border:1px solid var(--ring); border-radius:16px;
+              padding:12px; box-shadow:0 6px 18px rgba(0,0,0,.12); display:flex; flex-direction:column; gap:10px; }
+  #definition{ background:#f9fafb; border:1px solid var(--ring); border-radius:12px; padding:8px 10px; min-height:44px;
+               line-height:1.35; font-size:.95rem; }
+  .inputRow{ display:flex; gap:8px; align-items:stretch }
+  input[type=text]{ flex:1 1 auto; min-width:0; padding:12px 14px; border-radius:12px; border:1px solid #d1d5db; font-size:1rem; }
+  .btn{ border:0; border-radius:12px; font-weight:800; cursor:pointer; padding:12px 16px }
+  #submitBtn{ background:var(--primary); color:#fff } #passBtn{ background:#e5e7eb; color:#111827 } #resetBtn{ background:#111827; color:#fff }
+  .belowRow{ display:flex; gap:8px; justify-content:center }
+
+  .right{ width:320px; flex:0 0 auto; display:flex; flex-direction:column; gap:16px }
+  .panel{ background:var(--panel); border-radius:16px; padding:16px; box-shadow:0 4px 14px rgba(0,0,0,.06) }
+  .big{ font-weight:800; font-size:1.2rem } .pill{ display:inline-block; background:#f3f4f6; border-radius:999px; padding:6px 10px; margin-right:6px }
+  .timer{ font-weight:800 }
+  .right input[type=text]{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid #d1d5db; font-size:.95rem; }
+
+  .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35) }
+  .modal.show{ display:flex } .card{ background:#fff; border-radius:16px; padding:22px; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.25) }
+</style>
+</head>
+<body>
+  <section class="board">
+    <div id="ring" class="ring"></div>
+
+    <!-- Center: definition + input+Submit (side-by-side) + Pass/Reset below -->
+    <div class="centerBox">
+      <div id="definition">Click any letter to get a Hungarian word/expression. The timer starts with your first click.</div>
+      <div class="inputRow">
+        <input id="answer" type="text" placeholder="Type your answer…" autocomplete="off" />
+        <button id="submitBtn" class="btn">Submit</button>
+      </div>
+      <div class="belowRow">
+        <button id="passBtn" class="btn">Pass</button>
+        <button id="resetBtn" class="btn">Reset</button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="right">
+    <div class="panel">
+      <div class="big">Player</div>
+      <div style="display:grid; gap:8px; margin-top:8px">
+        <input id="playerName" type="text" placeholder="Your name" />
+      </div>
+    </div>
+    <div class="panel">
+      <div class="big">Game Info</div>
+      <div><span class="pill">Score: <span id="score">0</span></span></div>
+      <div><span class="pill">Solved: <span id="solved">0</span>/<span id="total">—</span></span></div>
+      <div><span class="pill">Passes: <span id="passes">0</span></span></div>
+      <div><span class="pill">Time: <span id="timer" class="timer">05:00</span></span></div>
+    </div>
+    <div class="panel">
+      <div class="big">Instructions</div>
+      <ol style="margin:8px 0 0 18px; color:#6b7280">
+        <li>Enter your name, then click a letter to see a Hungarian word/expression.</li>
+        <li>Type a matching word starting with that letter.</li>
+        <li>Press <b>Enter</b> or click <b>Submit</b>. Use <b>Pass</b> to return to that letter later.</li>
+      </ol>
+    </div>
+  </aside>
+
+  <!-- Result modal -->
+  <div class="modal" id="modal">
+    <div class="card">
+      <h3 id="modalTitle"></h3>
+      <p id="modalText" style="line-height:1.35"></p>
+      <button id="againBtn" class="btn" style="background:#2563eb;color:#fff">Play again</button>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   GLOSSARY (one per line)
+   =========================
+   Egy sor:  word = rövid, egyszerű definíció
+   Több azonos kezdőbetűjű szóból minden körben VÉLETLENÜL választunk egyet.
+*/
+const GLOSSARY_TEXT = `
+weekday  = hétköznap
+weekend  = hétvége
+accommodation  = szállás
+achievement  = siker, teljesítmény
+adventurer  = kalandor
+article  = cikk
+attempt = próba, próbál
+benefit = előny
+brave  = bátor
+circle = körbekerül, körbemegy
+complete = teljesít, befejez
+courage  = bátorság
+crew  = legénység
+cruise  = hajózás
+despite  = valami ellenére
+development  = fejlesztés
+entire  = teljes
+excursion  = kirándulás
+expedition  = felfedezőút, expedíció
+globe  = föld (gömb)
+globetrotter  = világjáró
+hitchhiking  = stoppolás
+hold the record = tartja a rekordot
+journey  = út, utazás
+presentation  = előadás
+prove  = bizonyít
+provide  = ad, nyújt, biztosít
+publish  = kiad, publikál
+remarkable  = jelentős, figyelemre méltó
+sail = vitorlázik
+sailor  = tengerész
+set sail = kihajóz
+solo  = egyedüli, szóló
+succeed  = sikerre visz, sikerül
+unfamiliar  = ismeretlen, idegen
+voyage  = utazás (tengeren)
+wear sth out = elhasznál, elkoptat (cipőt, ruhát)
+accommodate  = helyt ad
+achieve  = elér valamit
+advertise  = hirdet, reklámoz
+announce  = bejelent
+announcement  = bejelentés
+application  = jelentkezés
+apply  = jelentkezik
+campground  = tábor, kemping
+cancellation  = lemondás, törlés
+confirm  = visszaigazol
+connect  = kapcsolódik, kapcsol
+connection  = kapcsolat
+description  = leírás
+destination  = úticél
+develop  = fejleszt, fejlődik
+exotic  = egzotikus
+explanation  = magyarázat
+exploration  = kutatás, felderítés
+guided tour = túra idegenvezetővel
+improvement  = fejlesztés, fejlődés
+inexpensive  = nem drága
+insurance  = biztosítás
+introduction  = bemutatás, bemutatkozás
+on board = fedélzeten
+platform  = vágány
+present = előad, bemutat
+reservation  = foglalás
+reserve  = foglal, lefoglal
+safari  = safari
+scenery  = látvány, látványosság
+stress-free = stresszmentes
+wildlife  = vadvilág
+access = hozzáfér
+anxious  = ideges
+app  = applikáció
+arrival  = érkezés
+bargain = alku
+car rental = autóbérlés
+come across = találkozik valakivel, valamivel
+come up = előrukkol valamivel
+compare = összehasonlít
+count on = számít valakire, valamire
+currency  = valuta
+delay  = késedelem, késés
+departure  = indulás
+directly  = egyenesen
+domestic flight = belföldi repülőjárat
+essential  = alapvető
+fed up with = elege van valamiből
+flexible  = rugalmas
+frequent  = gyakori
+handy  = hasznos
+hassle = veszekedés, szóváltás
+illegal  = törvénytelen, illegális
+impressed  = lenyűgözött
+interactive  = interaktív
+journal  = napló, folyóirat
+landmark  = látnivaló
+legal  = törvényes, legális
+leisure  = szabadidő
+major  = fő, jelentős, fontos
+offline  = kapcsolat nélküli/nem elérhető
+once = egyszer
+record = felvesz, rögzít
+right = helyes, megfelelő
+schedule = menetrend
+section  = szakasz, rész
+store = tárol
+struggle = küzdelem, harc
+timetable  = menetrend
+tram  = villamos
+unique  = egyedülálló
+update = frissítés
+upload = feltölt
+botanical garden = botanikus kert
+colourful  = színes
+educational  = oktatási, nevelési
+enjoyable  = élvezetes
+fascinating  = lenyűgöző
+from up close = közelről
+seasick = tengeribeteg
+highlight  = fénypont
+impression  = benyomás
+magnificent  = lélegzetelállító
+massive  = masszív, erőteljes
+mouth-watering = ínycsiklandó
+once in a lifetime = egyszer az életben
+opportunity  = lehetőség
+palm tree = pálmafa
+peaceful  = békés
+pond  = tó, kerti tó
+private  = magán, privát
+recommendation  = ajánlás, javaslat
+species  = faj, fajok
+spectacular  = látványos
+square = négyzet alakú
+suggestion  = javaslat
+sweet=smelling = édes illatú
+the public = a közönség
+tropical  = trópusi
+typical  = tipikus, jellegzetes
+unforgettable  = felejthetetlen
+weird  = furcsa, különös
+wonder = csoda
+
+`;
+
+/* ===== Build groups per letter, then pick random per letter for each round ===== */
+function buildGroupsFromGlossary(text){
+  const lines = text.split(/\n/).map(l=>l.trim()).filter(Boolean);
+  const groups = {};
+  for (const line of lines){
+    if (line.startsWith('//')) continue;
+    const m = line.match(/^([^=]+?)\s*=\s*(.+)$/);
+    if(!m) continue;
+    const ans = m[1].trim();
+    const def = m[2].trim();
+    if(!ans || !def) continue;
+    const L = ans[0].toUpperCase();
+    if (!groups[L]) groups[L] = [];
+    groups[L].push({ ans, def });
+  }
+  return groups;
+}
+function pickRoundCards(groups){
+  const picked = {};
+  Object.keys(groups).forEach(L=>{
+    const arr = groups[L];
+    const idx = Math.floor(Math.random()*arr.length);
+    picked[L] = { ...arr[idx] };
+  });
+  return picked;
+}
+const GROUPS_BY_LETTER = buildGroupsFromGlossary(GLOSSARY_TEXT);
+
+/* Reseed a full new round (random choices per letter) */
+function reseedRound(){
+  window.CARDS = pickRoundCards(GROUPS_BY_LETTER);
+  window.letters = Object.keys(CARDS).sort();
+  const totalEl = document.getElementById('total');
+  if (totalEl) totalEl.textContent = letters.length;
+}
+</script>
+
+<script>
+// ===== GAME STATE & UI =====
+reseedRound();   // <-- random választás betűnként a kör elején
+
+let active=null, solved=new Set(), passed=new Set();
+let score=0, passCount=0, secondsLeft=300, timer=null, timerStarted=false;
+
+const ring=document.getElementById('ring');
+const def=document.getElementById('definition');
+const ans=document.getElementById('answer');
+const submitBtn=document.getElementById('submitBtn');
+const passBtn=document.getElementById('passBtn');
+const resetBtn=document.getElementById('resetBtn');
+const scoreEl=document.getElementById('score');
+const solvedEl=document.getElementById('solved');
+const passesEl=document.getElementById('passes');
+const timerEl=document.getElementById('timer');
+const modal=document.getElementById('modal');
+const modalTitle=document.getElementById('modalTitle');
+const modalText=document.getElementById('modalText');
+const againBtn=document.getElementById('againBtn');
+const nameInput=document.getElementById('playerName');
+
+function buildRing(){
+  ring.innerHTML='';
+  const N=letters.length, R=ring.clientWidth/2-40;
+  letters.forEach((ch,i)=>{
+    const a=(i/N)*2*Math.PI - Math.PI/2;
+    const x=Math.cos(a)*R + ring.clientWidth/2;
+    const y=Math.sin(a)*R + ring.clientHeight/2;
+    const el=document.createElement('div');
+    el.className='letter'; el.id='L_'+ch; el.textContent=ch;
+    el.style.left=(x-29)+'px'; el.style.top=(y-29)+'px';
+    el.onclick=()=>selectLetter(ch);
+    ring.appendChild(el);
+  });
+}
+window.addEventListener('resize', buildRing);
+
+function markStyles(){
+  letters.forEach(ch=>{
+    const e=document.getElementById('L_'+ch);
+    if(!e) return;
+    e.classList.remove('active','solved','passed');
+    if(active===ch) e.classList.add('active');
+    if(solved.has(ch)) e.classList.add('solved');
+    if(passed.has(ch) && !solved.has(ch)) e.classList.add('passed');
+  });
+}
+function setTimer(sec){
+  const m=String(Math.floor(sec/60)).padStart(2,'0');
+  const s=String(sec%60).padStart(2,'0');
+  timerEl.textContent=`${m}:${s}`;
+}
+function startTimer(){
+  if(timerStarted) return;
+  timerStarted=true;
+  timer=setInterval(()=>{
+    secondsLeft--; setTimer(secondsLeft);
+    if(secondsLeft<=0){ clearInterval(timer); finish(false); }
+  },1000);
+}
+function ensureName(){
+  const name=nameInput.value.trim();
+  if(!name){
+    alert('Please enter your name on the right before you start.');
+    return false;
+  }
+  return true;
+}
+
+function selectLetter(ch){
+  if(!ensureName()) return;
+  startTimer();
+  active=ch;
+  def.textContent = `${ch}: ${CARDS[ch].def}`;
+  ans.placeholder = `Starts with “${ch}”…`;
+  ans.focus();
+  markStyles();
+}
+function submit(){
+  if(!active) return;
+  const g=ans.value.trim().toLowerCase();
+  if(!g) return;
+  if(g[0]!==active.toLowerCase()){ def.textContent=`Word must start with ${active}.`; return; }
+  if(g===CARDS[active].ans.toLowerCase()){
+    solved.add(active); passed.delete(active); score+=10;
+    scoreEl.textContent=score; solvedEl.textContent=solved.size;
+    def.textContent='✅ Correct! Pick another letter.';
+    ans.value=''; active=null; markStyles();
+    if(solved.size===letters.length) finish(true);
+  }else{
+    def.textContent='❌ Not quite. Try again or Pass.';
+  }
+}
+function pass(){
+  if(!active) return;
+  if(!solved.has(active)){
+    passed.add(active); passCount++; passesEl.textContent=passCount;
+    def.textContent=`⏭️ Passed ${active}. Choose another letter.`;
+    ans.value=''; active=null; markStyles();
+  }
+}
+function resetAll(){
+  clearInterval(timer); timer=null; timerStarted=false; secondsLeft=300; setTimer(300);
+  active=null; solved.clear(); passed.clear(); score=0; passCount=0;
+  scoreEl.textContent='0'; solvedEl.textContent='0'; passesEl.textContent='0';
+  def.textContent='Click any letter to get a Hungarian word/expression. The timer starts with your first click.';
+  ans.value=''; ans.placeholder='Type your answer…';
+  reseedRound();   // <-- új random készlet
+  buildRing();     // <-- újrarajzolás
+  markStyles();
+}
+function finish(won){
+  clearInterval(timer);
+  const name = nameInput.value.trim();
+  const solvedCount = solved.size;
+  const dateISO = new Date().toISOString();
+
+  modal.classList.add('show');
+  modalTitle.textContent = won ? '🎉 You win!' : '⏰ Time’s up!';
+  modalText.innerHTML = `
+    <b>Name:</b> ${name}<br>
+    <b>Date/Time (UTC):</b> ${dateISO}<br>
+    <b>Score:</b> ${score}<br>
+    <b>Time left:</b> ${timerEl.textContent}<br>
+    <b>Solved letters:</b> ${solvedCount}/${letters.length}
+  `;
+}
+
+submitBtn.addEventListener('click', submit);
+ans.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); submit(); }});
+passBtn.addEventListener('click', pass);
+resetBtn.addEventListener('click', resetAll);
+againBtn.addEventListener('click', ()=>{ modal.classList.remove('show'); resetAll(); });
+
+// Init
+buildRing(); markStyles(); setTimer(300);
+</script>
+</body>
+</html>
